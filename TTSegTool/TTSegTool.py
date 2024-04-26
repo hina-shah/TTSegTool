@@ -202,6 +202,7 @@ class TTSegToolWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.ui.imagePatchesTableWidget.currentCellChanged.connect(self.updateFiducialSelection)
       # segmentation management
       self.ui.showSegmentationCheckBox.stateChanged.connect(self.changeSegmentationVisibility)
+      self.ui.startSegmentEditModeButton.clicked.connect(self.switchSegmentEditMode)
       self.addMarkupObservers()
 
     #------------------------------------------------------------------------------
@@ -236,12 +237,14 @@ class TTSegToolWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       self.handleSegmentModeOnOFf()
       self.ui.startSegmentEditModeButton.setChecked(self.segmentEditModeOn)
       if self.segmentEditModeOn:
+        print("Starting segment mode on")
         self.ui.startSegmentEditModeButton.setStyleSheet("QPushButton {background-color: rgb(214, 0, 0)}")
         self.ui.startSegmentEditModeButton.setText("   STOP SEGMENTATION EDIT MODE   ")
         self.save_segmentation_flag = True
       else:
         self.ui.startSegmentEditModeButton.setStyleSheet("QPushButton {background-color: rgb(85, 170, 0)}")
         self.ui.startSegmentEditModeButton.setText("   START SEGMENTATION EDIT MODE   ")
+        print("Switching segment mode off")
 
     #------------------------------------------------------------------------------
     def switchSegmentEditMode(self):
@@ -250,6 +253,7 @@ class TTSegToolWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.switchPatchEditMode()
 
       self.segmentEditModeOn = not self.segmentEditModeOn
+      print(self.segmentEditModeOn)
       self.setupSegmentEditMode()
     
     #------------------------------------------------------------------------------
@@ -815,11 +819,12 @@ class TTSegToolWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         if progress.wasCanceled:
           break
 
-        if len(row['image path']) ==0 or len(row['segmentation path']) == 0:
+        # if len(row['image path']) ==0 or len(row['segmentation path']) == 0:
+        if len(row['image path']) ==0:
           logging.error('Found an empty Image path or Segmentation path in the master file, image: {}, seg: {}'.format(row['image path'], row['segmentation path']))
           continue
         row['image path'] = self.path_to_server / row['image path'].lstrip("\\").replace("\\", "/")
-        row['segmentation path'] = self.path_to_server / row['segmentation path'].lstrip("\\").replace("\\","/")
+        row['segmentation path'] = self.path_to_server / row['segmentation path'].lstrip("\\").replace("\\","/") if len(row['segmentation path']) >0 else ''
         create_new = False
         try_to_read_patches = False
         if len(row['patches path']) > 0:
@@ -1103,8 +1108,8 @@ class TTSegToolWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         found_at_least_one = False
         for row in self.image_list:
           image_path = row['image path']
-          seg_path = row['segmentation path']
-          if image_path.exists() and seg_path.exists():
+          seg_path_exists = row['segmentation path'].exists() if len(str(row['segmentation path'])) > 0 else True
+          if image_path.exists() and seg_path_exists:
             found_at_least_one = True
             break
 
@@ -1143,7 +1148,10 @@ class TTSegToolWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         logging.warning("Wrong image index: {}".format(self.current_ind))
       
       imgpath = self.image_list[self.current_ind]['segmentation path']
-      if not imgpath or not imgpath.exists():
+      if len(str(imgpath)) == 0:
+        logging.info("Segmentation does not exist")
+        return
+      if len(str(imgpath))> 0 and not imgpath.exists():
         slicer.util.infoDisplay("Could not load segmenation: {}, does not exist".format(imgpath))
         self.segmentation_node = None
         return
@@ -1383,7 +1391,7 @@ class TTSegToolWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             for listrow in self.image_list:
               row = listrow.copy()
               row['image path'] = row['image path'].relative_to(self.path_to_server)
-              row['segmentation path'] = row['segmentation path'].relative_to(self.path_to_server)
+              row['segmentation path'] = row['segmentation path'].relative_to(self.path_to_server) if len(str(row['segmentation path']))>0 else ''
               if row['patches path'].exists():
                 row['patches path'] = row['patches path'].relative_to(self.path_to_server)
               else:
